@@ -37,7 +37,8 @@ import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import List, Optional
-from transformers import AutoTokenizer, M2M100ForConditionalGeneration
+from transformers import M2M100ForConditionalGeneration
+from tokenization_small100 import SMALL100Tokenizer
 from lxml import etree
 
 
@@ -67,28 +68,26 @@ class TranslatorConfig:
 
 def translate_batch(text_batch, dest_lang, model, tokenizer):
     """
-    Translates a batch of text strings into a specified destination language.
-
-    Args:
-        text_batch (List[str]): A list of text strings for translation.
-        dest_lang (str): The ISO code of the destination language.
-        model (transformers.PreTrainedModel): The pre-trained translation model.
-        tokenizer (transformers.PreTrainedTokenizer): The tokenizer for the model.
-
-    Returns:
-        List[str]: The list of translated strings in the destination language.
-
-    Example usage:
-        translated_texts = translate_batch(["Hello, world!"], 'fr', model, tokenizer)
+    Traduit un lot de textes avec SMaLL-100
     """
-
+    tokenizer.tgt_lang = dest_lang  # Important : définir la langue cible
     model_inputs = tokenizer(
-        text_batch, return_tensors="pt", padding=True, truncation=True, max_length=512)
+        text_batch,
+        return_tensors="pt",
+        padding=True,
+        truncation=True,
+        max_length=512
+    )
+    
     gen_tokens = model.generate(
-        **model_inputs, forced_bos_token_id=tokenizer.get_lang_id(dest_lang))
+        **model_inputs,
+        max_length=512,
+        num_beams=5,  # Recommandé pour SMaLL-100
+        no_repeat_ngram_size=2
+    )
+    
     translations = tokenizer.batch_decode(gen_tokens, skip_special_tokens=True)
     return translations
-
 
 @dataclass
 class GElement:
@@ -457,9 +456,9 @@ def main():
         'language', help='The target language code for the translation.')
     args = parser.parse_args()
 
-    model_name = "facebook/m2m100_418M"
+    model_name = "alirezamsh/small100"
     model = M2M100ForConditionalGeneration.from_pretrained(model_name)
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tokenizer = SMALL100Tokenizer.from_pretrained(model_name)
 
     files = parse_xliff(args.source)
     copy_source_to_target(files)
